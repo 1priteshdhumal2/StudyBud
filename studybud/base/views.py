@@ -5,7 +5,8 @@ from django.db.models import Q
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
-from .models import Room, Topic
+from django.contrib.auth.forms import UserCreationForm
+from .models import Room, Topic, Message
 from .forms import RoomForm
 
 # Create your views here.
@@ -18,8 +19,9 @@ from .forms import RoomForm
 
 
 def loginPage(request):
+    page = 'login'
     if request.method == "POST":
-        username = request.POST.get("username")
+        username = request.POST.get("username").lower()
         password = request.POST.get("password")
 
         try:
@@ -35,7 +37,7 @@ def loginPage(request):
         else:
             messages.error(request, "Username or Password does not exist")
 
-    context = {}
+    context = {'page': page}
     return render(request, "base/login_register.html", context)
 
 
@@ -43,6 +45,22 @@ def logoutUser(request):
     logout(request)
     return redirect("Home")
 
+def registerPage(request):
+    form = UserCreationForm()
+
+    if request.method == "POST":
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.username = user.username.lower()
+            user.save()
+            login(request, user)
+            return redirect("Home")
+        else:
+            messages.error(request, "An error occured during registration")
+
+    context = {'form' : form}
+    return render(request, "base/login_register.html", context)
 
 def home(request):
     q = request.GET.get("q") if request.GET.get("q") != None else ""
@@ -60,7 +78,17 @@ def home(request):
 
 def room(request, pk):
     room = Room.objects.get(id=pk)
-    context = {"room": room}
+    roomMessages = room.message_set.all().order_by('-created')
+
+    if request.method == 'POST':
+        message = Message.objects.create(
+            user = request.user,
+            room = room,
+            body = request.POST.get('body')
+        )
+        return redirect("Room", pk = room.id)
+    
+    context = {"room": room, "roomMessages" : roomMessages}
     return render(request, "base/room.html", context)
 
 
